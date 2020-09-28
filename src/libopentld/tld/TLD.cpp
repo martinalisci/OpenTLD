@@ -154,8 +154,13 @@ KalmanTracker::KalmanTracker()
         //DEBUG
         //printf("in kalman track\n");
         //FINE
+        if(prevBB->width <= 0 || prevBB->height <= 0)
+        {
+            return;
+        }
+
         double precTick = ticks;
-        ticks = (double) cv::getTickCount();
+        //ticks = (double) cv::getTickCount();
         double dT = (ticks - precTick) / cv::getTickFrequency(); //seconds
 
         // >>>> Matrix A
@@ -173,12 +178,13 @@ KalmanTracker::KalmanTracker()
         //cout <<"width"<< kalmanBB->width << endl;
         //cout << "state at 5"<<state.at<float>(5) << endl;
         //cout <<"height"<< kalmanBB->height << endl;
-        //float w = state.at<int>(4);
-        //float h = int(state.at<float>(5));
-        //float x = state.at<float>(0) - w / 2;
-        //float y = state.at<float>(1) - h / 2;
-        
-        float w = floor(state.at<int>(4));
+ 
+        cout <<"prev bb w "<< prevBB->width << endl;
+        cout <<"prev bb h "<< prevBB->height << endl;
+        cout <<"prev bb x "<< prevBB->x << endl;
+        cout <<"prev bb y "<< prevBB->y << endl;
+
+        float w = floor(state.at<float>(4));
         float h = floor(state.at<float>(5));
         float x = floor(state.at<float>(0) - w /2);
         float y = floor(state.at<float>(1) - h /2);
@@ -197,10 +203,10 @@ KalmanTracker::KalmanTracker()
             //FINE
         }
 
-        //cout <<"height"<< h << "\n" << endl;
-        //cout <<"width"<< w << "\n" << endl;
-        //cout <<"x" << x << "\n"<< endl;
-        //cout << "y" << y << "\n" << endl;
+        cout <<"height"<< h << "\n" << endl;
+        cout <<"width"<< w << "\n" << endl;
+        cout <<"x" << x << "\n"<< endl;
+        cout << "y" << y << "\n" << endl;
 
        
     }
@@ -349,6 +355,7 @@ void TLD::processImage(const Mat &img)
     //printf("in process image\n");
     //FINE
     storeCurrentData();
+     
     Mat grey_frame;
     cvtColor(img, grey_frame, CV_BGR2GRAY);
     currImg = grey_frame; // Store new image , right after storeCurrentData();
@@ -364,7 +371,8 @@ void TLD::processImage(const Mat &img)
     }
     //DEBUG
     //printf("prima di kalman track\n");
-    //FINE
+    //FIN
+    kalmanTracker->ticks = (double) cv::getTickCount();
     kalmanTracker->track(currImg,prevBB);
     //DEBUG
     //printf("dopo kalman track\n");
@@ -468,7 +476,7 @@ void TLD::fuseHypotheses()
         std::cout<<"scelto detectorBB"<<endl;
     }
     //DEBUG
-    printf("ok fuse\n");
+    //printf("ok fuse\n");
     //FINE
     /*
     float var = CalculateVariance(patch.values, nn->patch_size*nn->patch_size);

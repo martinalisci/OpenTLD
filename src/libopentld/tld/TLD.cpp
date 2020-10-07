@@ -35,6 +35,73 @@ using namespace cv;
 
 namespace tld
 {
+//Metrica
+Metrics::Metrics(int n)
+{
+    misses = vector<int>(n,0);
+    falsePostives = vector<int>(n,0);
+    mismatch = vector<int>(n,0);
+    matches = vector<char>(n);
+    nmatches = vector<int>(n,0);
+    distances = vector<double>(n,0); //sum of distances for frame t
+}
+
+Metrics::~Metrics()
+{
+    misses.clear();
+    falsePostives.clear();
+    matches.clear();
+    mismatch.clear();
+
+    delete &misses;
+    delete &falsePostives;
+    delete &matches;
+    delete &mismatch;
+}
+
+
+double Metrics::distanceCalculate(double x1, double y1, double x2, double y2)
+{
+	double x = x1 - x2; //calculating number to square in next step
+	double y = y1 - y2;
+	double dist;
+
+	dist = pow(x, 2) + pow(y, 2);       //calculating Euclidean distance
+	dist = sqrt(dist);                  
+
+	return dist;
+}
+
+void Metrics::processframe(int i ,cv::Rect* object, cv::Rect* hypotesisMFT, cv::Rect* hypotesisKalman)
+{
+    double distMFT = distanceCalculate(object->x,object->y,hypotesisMFT->x,hypotesisMFT->y);
+    double distK = distanceCalculate(object->x,object->y,hypotesisKalman->x,hypotesisKalman->y);
+
+    if(distMFT<= distK)
+    {
+        matches[i] = 'm';
+        nmatches[i]++;
+        falsePostives[i]++;
+        if (i!=0 && matches[i]!=matches[i-1])
+        {
+            mismatch[i]++;
+        }
+    }
+    else
+    {
+        matches[i] = 'k';
+        nmatches[i]++;
+        falsePostives[i]++;
+        if (i!=0 && matches[i]!=matches[i-1])
+        {
+            mismatch[i]++;
+        }
+    }
+    distances[i]+=distK;
+    distances[i]+=distMFT;
+    
+}
+
 //********************************************KalmanTracker
 KalmanTracker::KalmanTracker()
     {
@@ -192,7 +259,7 @@ KalmanTracker::KalmanTracker()
         if(x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > currImg.cols || y + h > currImg.rows || x != x || y != y || w != w || h != h) //x!=x is check for nan
         {
             //Leave it empty
-            printf("nada\n");
+            //printf("nada\n");
            
         }
         else
@@ -203,10 +270,10 @@ KalmanTracker::KalmanTracker()
             //FINE
         }
 
-        cout <<"height"<< h << "\n" << endl;
-        cout <<"width"<< w << "\n" << endl;
-        cout <<"x" << x << "\n"<< endl;
-        cout << "y" << y << "\n" << endl;
+        //cout <<"height"<< h << "\n" << endl;
+        //cout <<"width"<< w << "\n" << endl;
+        //cout <<"x" << x << "\n"<< endl;
+        //cout << "y" << y << "\n" << endl;
 
        
     }

@@ -35,6 +35,36 @@
 
 namespace tld
 {
+class Metrics
+{
+    public:
+        //centroids are stored
+        vector<int> misses;
+        vector<int> falsePostives;
+        vector<int> mismatch;
+        vector<int> nmatches; //matches for frame t
+        vector<double> distances; //sum of distances for frame t
+        vector<char> matches;
+
+        //precision on object position
+        double motop = 0.0;
+        
+        //accuracy over time
+        double mota = 0.0;
+        
+        //correspondence
+        double threshold =  500;
+
+
+    Metrics(int n);
+    virtual ~Metrics();
+    //euclidean distance between the two centroids
+    double distanceCalculate(double x1, double y1, double x2, double y2);
+    void processframe(int i, cv::Rect* object, cv::Rect* hypotesisMFT, cv::Rect* hypotesisKalman);
+
+
+
+};
 
 class KalmanTracker
     {

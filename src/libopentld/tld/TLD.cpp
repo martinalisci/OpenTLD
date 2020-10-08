@@ -35,12 +35,12 @@ using namespace cv;
 
 namespace tld
 {
-//Metrica
+//*****************************************Metrica
 Metrics::Metrics(int n)
 {
     misses = vector<int>(n,0);
     falsePostives = vector<int>(n,0);
-    mismatch = vector<int>(n,0);
+    mismatches = vector<int>(n,0);
     matches = vector<char>(n);
     nmatches = vector<int>(n,0);
     distances = vector<double>(n,0); //sum of distances for frame t
@@ -51,12 +51,12 @@ Metrics::~Metrics()
     misses.clear();
     falsePostives.clear();
     matches.clear();
-    mismatch.clear();
+    mismatches.clear();
 
     delete &misses;
     delete &falsePostives;
     delete &matches;
-    delete &mismatch;
+    delete &mismatches;
 }
 
 
@@ -72,7 +72,7 @@ double Metrics::distanceCalculate(double x1, double y1, double x2, double y2)
 	return dist;
 }
 
-void Metrics::processframe(int i ,cv::Rect* object, cv::Rect* hypotesisMFT, cv::Rect* hypotesisKalman)
+void Metrics::processFrame(int i ,cv::Rect* object, cv::Rect* hypotesisMFT, cv::Rect* hypotesisKalman)
 {
     double distMFT = distanceCalculate(object->x,object->y,hypotesisMFT->x,hypotesisMFT->y);
     double distK = distanceCalculate(object->x,object->y,hypotesisKalman->x,hypotesisKalman->y);
@@ -84,7 +84,7 @@ void Metrics::processframe(int i ,cv::Rect* object, cv::Rect* hypotesisMFT, cv::
         falsePostives[i]++;
         if (i!=0 && matches[i]!=matches[i-1])
         {
-            mismatch[i]++;
+            mismatches[i]++;
         }
     }
     else
@@ -94,12 +94,45 @@ void Metrics::processframe(int i ,cv::Rect* object, cv::Rect* hypotesisMFT, cv::
         falsePostives[i]++;
         if (i!=0 && matches[i]!=matches[i-1])
         {
-            mismatch[i]++;
+            mismatches[i]++;
         }
     }
     distances[i]+=distK;
     distances[i]+=distMFT;
     
+}
+
+double Metrics::motp(int n)
+{
+    int i = 0;
+    int sumDistances = 0;
+    int sumMatches = 0;
+
+    for(i=0; i<n; i++)
+    {
+		sumDistances += distances[i];
+        sumMatches += matches[i];
+	}
+    return (sumDistances/sumMatches);
+}
+
+double Metrics::mota(int n)
+{
+    int i = 0;
+    int sumMisses = 0;
+    int sumFp = 0;
+    int sumMismatches = 0;
+    int nObjects = 0;
+
+    for (i=0;i<n;i++)
+    {
+        sumMisses += misses[i];
+        sumFp += falsePostives[i];
+        sumMismatches += mismatches[i];
+        nObjects++;
+    }
+
+    return (1-((sumMisses+sumFp+sumMismatches)/nObjects));
 }
 
 //********************************************KalmanTracker
@@ -494,14 +527,14 @@ void TLD::fuseHypotheses()
             std::cout<<"scelto detector"<<endl;
             kalmanTracker->update(detectorBB);
         }
-        else if (kalmanBB != NULL && confKalman>0.85 && confKalman >confTracker )
+        else if (kalmanBB != NULL && confKalman>=0.85 && confKalman >=confTracker )
         {
-            float currentRatio = currBB->height/currBB->width;
-            float previousRatio = prevBB->height/prevBB->width;
-            if (currentRatio == previousRatio){
-                currConf = confKalman;
-                currBB = tldCopyRect(kalmanBB);
-            }
+            //float currentRatio = currBB->height/currBB->width;
+            //float previousRatio = prevBB->height/prevBB->width;
+            //if (currentRatio == previousRatio){
+            currConf = confKalman;
+            currBB = tldCopyRect(kalmanBB);
+            //}
             kalmanTracker->update(kalmanBB);
             std::cout<<"kalman aggiornato con kalmanBB"<<endl;
         }
@@ -518,7 +551,7 @@ void TLD::fuseHypotheses()
             else
             {
                 kalmanTracker->update(kalmanBB);
-                std::cout<<"kalman aggiornato con kalmanBB ma conf <0.6"<<endl;
+                std::cout<<"kalman aggiornato con kalmanBB ma conf <0.85"<<endl;
             }
 
             if(confTracker > nnClassifier->thetaTP)

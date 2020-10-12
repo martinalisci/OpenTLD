@@ -32,13 +32,8 @@ using tld::Settings;
 
 int main(int argc, char **argv)
 {
-    //DEBUG
-    //printf("in opentld\n");
-    //FINE
     Main *main = new Main();
-    //DEBUG
-    //printf("ok costruttore main\n");
-    //FINE
+    
     Config config;
     ImAcq *imAcq = imAcqAlloc();
     Gui *gui = new Gui();

@@ -43,7 +43,7 @@ class Metrics
         std::vector<int> falsePostives;
         std::vector<int> mismatches;
         std::vector<int> nmatches; //matches for frame t
-        std::vector<double> distances; //sum of distances for frame t
+        std::vector<float> distances; //sum of distances for frame t
         std::vector<char> matches;
 
         //precision on object position
@@ -56,13 +56,12 @@ class Metrics
         double threshold =  500;
 
 
-    Metrics(int n);
-    virtual ~Metrics();
+    Metrics();
     //euclidean distance between the two centroids
-    double distanceCalculate(double x1, double y1, double x2, double y2);
-    void processFrame(int i, cv::Rect* object, cv::Rect* hypotesisMFT, cv::Rect* hypotesisKalman);
-    double mota(int n);
-    double motp(int n);
+    float distanceCalculate(float x1, float y1, float x2, float y2);
+    void processFrame(cv::Rect object, cv::Rect hypotesisMFT, cv::Rect hypotesisKalman);
+    float mota();
+    float motp();
 
 
 
@@ -109,6 +108,7 @@ public:
     DetectorCascade *detectorCascade;
     NNClassifier *nnClassifier;
     KalmanTracker *kalmanTracker;
+    Metrics metric;
     bool valid;
     bool wasValid;
     cv::Mat prevImg;

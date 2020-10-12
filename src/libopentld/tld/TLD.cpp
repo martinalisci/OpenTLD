@@ -36,77 +36,105 @@ using namespace cv;
 namespace tld
 {
 //*****************************************Metrica
-Metrics::Metrics(int n)
+Metrics::Metrics()
 {
-    misses = vector<int>(n,0);
-    falsePostives = vector<int>(n,0);
-    mismatches = vector<int>(n,0);
-    matches = vector<char>(n);
-    nmatches = vector<int>(n,0);
-    distances = vector<double>(n,0); //sum of distances for frame t
-}
 
-Metrics::~Metrics()
-{
-    misses.clear();
-    falsePostives.clear();
-    matches.clear();
-    mismatches.clear();
-
-    delete &misses;
-    delete &falsePostives;
-    delete &matches;
-    delete &mismatches;
 }
 
 
-double Metrics::distanceCalculate(double x1, double y1, double x2, double y2)
+float Metrics::distanceCalculate(float x1, float y1, float x2, float y2)
 {
-	double x = x1 - x2; //calculating number to square in next step
-	double y = y1 - y2;
-	double dist;
 
-	dist = pow(x, 2) + pow(y, 2);       //calculating Euclidean distance
-	dist = sqrt(dist);                  
-
+	float x = x1 - x2; //calculating number to square in next step
+	float y = y1 - y2;
+	float dist=0.0;
+	dist = pow(x, 2) + pow(y, 2);     //calculating Euclidean distance
+	dist = sqrt(dist);        
+    
 	return dist;
 }
 
-void Metrics::processFrame(int i ,cv::Rect* object, cv::Rect* hypotesisMFT, cv::Rect* hypotesisKalman)
+void Metrics::processFrame(cv::Rect object, cv::Rect hypotesisMFT, cv::Rect hypotesisKalman)
 {
-    double distMFT = distanceCalculate(object->x,object->y,hypotesisMFT->x,hypotesisMFT->y);
-    double distK = distanceCalculate(object->x,object->y,hypotesisKalman->x,hypotesisKalman->y);
-
+    float distMFT = distanceCalculate(object.x,object.y,hypotesisMFT.x,hypotesisMFT.y);
+    float distK = distanceCalculate(object.x,object.y,hypotesisKalman.x,hypotesisKalman.y);
+    
+    int dim = 0;
+    int prec = 0;
+    int result = 0;
+    char str1;
+    char str2;
+    //std::cout<<"dist mdf: "<<distMFT<<"dist k: "<<distK<<std::endl;
     if(distMFT<= distK)
     {
-        matches[i] = 'm';
-        nmatches[i]++;
-        falsePostives[i]++;
-        if (i!=0 && matches[i]!=matches[i-1])
+        matches.push_back('m');
+        dim = matches.size();
+
+        //std::cout<<"dim : "<<dim<<std::endl;
+        //int i;
+        //for(i=0;i<matches.size(); i++){
+            //std::cout<<"matches: "<<matches[i]<<std::endl;
+        //}
+        
+        if (dim>1)
         {
-            mismatches[i]++;
+            dim--;
+            prec = dim-1;
+            //std::cout<<"dim : "<<dim<<std::endl;
+            //std::cout<<"prec : "<<prec<<std::endl;
+            str1 = matches.at(dim);
+            str2 = matches.at(prec);
+            result = strcmp(&str1,&str2);
+            if (result!=0)
+            {
+                mismatches.push_back(1);
+            }
         }
     }
     else
     {
-        matches[i] = 'k';
-        nmatches[i]++;
-        falsePostives[i]++;
-        if (i!=0 && matches[i]!=matches[i-1])
+        
+        matches.push_back('k');
+        dim = matches.size();
+
+
+        //std::cout<<"dim : "<<dim<<std::endl;
+        //int i;
+        //for(i=0;i<matches.size(); i++){
+            //std::cout<<"matches: "<<matches[i]<<std::endl;
+        //}
+
+
+        if (dim>1)
         {
-            mismatches[i]++;
+            
+            dim--;
+            prec = dim-1;
+            //std::cout<<"dim : "<<dim<<std::endl;
+            //std::cout<<"prec : "<<prec<<std::endl;
+            str1 = matches[dim];
+            str2 = matches[prec];
+            result = strcmp(&str1,&str2);
+            if (result!=0)
+            {
+                mismatches.push_back(1);
+            }
         }
-    }
-    distances[i]+=distK;
-    distances[i]+=distMFT;
+       
+    }    
+    
+    nmatches.push_back(1);
+    falsePostives.push_back(1);
+    distances.push_back(distK+distMFT);
     
 }
 
-double Metrics::motp(int n)
+float Metrics::motp()
 {
     int i = 0;
     int sumDistances = 0;
     int sumMatches = 0;
+    int n = matches.size(); // we always have a match
 
     for(i=0; i<n; i++)
     {
@@ -116,13 +144,14 @@ double Metrics::motp(int n)
     return (sumDistances/sumMatches);
 }
 
-double Metrics::mota(int n)
+float Metrics::mota()
 {
     int i = 0;
     int sumMisses = 0;
     int sumFp = 0;
     int sumMismatches = 0;
     int nObjects = 0;
+    int n = matches.size(); // we always have a match
 
     for (i=0;i<n;i++)
     {
@@ -338,9 +367,8 @@ TLD::TLD()
     nnClassifier = detectorCascade->nnClassifier;
     kalmanTracker = new KalmanTracker();
     medianFlowTracker = new MedianFlowTracker();
-    //DEBUG
-    //printf("ok costruttore\n");
-    //FINE
+
+    metric = Metrics();
 }
 
 TLD::~TLD()
@@ -376,9 +404,7 @@ TLD::~TLD()
         delete prevBB;
         prevBB = NULL;
     }
-    //DEBUG
-    //printf("ok distruttore\n");
-    //FINE
+    delete &metric;
 }
 
 void TLD::release()
@@ -431,10 +457,6 @@ void TLD::selectObject(const Mat &img, Rect *bb)
     detectorCascade->init();
     kalmanTracker->init(bb);
 
-    //DEBUG
-    //printf("ok select object\n");
-    //FINE
-
     currImg = img;
     if(currBB)
     {
@@ -451,9 +473,7 @@ void TLD::selectObject(const Mat &img, Rect *bb)
 
 void TLD::processImage(const Mat &img)
 {
-    //DEBUG
-    //printf("in process image\n");
-    //FINE
+   
     storeCurrentData();
      
     Mat grey_frame;
@@ -469,14 +489,10 @@ void TLD::processImage(const Mat &img)
     {
         detectorCascade->detect(grey_frame);
     }
-    //DEBUG
-    //printf("prima di kalman track\n");
-    //FIN
+   
     kalmanTracker->ticks = (double) cv::getTickCount();
     kalmanTracker->track(currImg,prevBB);
-    //DEBUG
-    //printf("dopo kalman track\n");
-    //FINE
+   
     fuseHypotheses();
 
     learn();
@@ -485,13 +501,14 @@ void TLD::processImage(const Mat &img)
 
 void TLD::fuseHypotheses()
 {
-    //DEBUG
-    //printf("in fuse");
-    //FINE
+    std::cout<<"fuse ipotesi"<<std::endl;
     Rect *trackerBB = medianFlowTracker->trackerBB;
     int numClusters = detectorCascade->detectionResult->numClusters;
     Rect *detectorBB = detectorCascade->detectionResult->detectorBB;
     Rect *kalmanBB = kalmanTracker->kalmanBB;
+    std::cout<<"process frame metrcs"<<std::endl;
+    metric.processFrame(*prevBB, *trackerBB, *kalmanBB);
+    std::cout<<"dopo processframemetrics"<<std::endl;
 
     if(currBB)
     {
@@ -513,6 +530,9 @@ void TLD::fuseHypotheses()
     {
         float confTracker = nnClassifier->classifyBB(currImg, trackerBB);
         float confKalman = nnClassifier->classifyBB(currImg,kalmanBB);
+        std::cout<<"conf MDF tracker: "<<confTracker<<std::endl;
+        std::cout<<"conf Kalman tracker: "<<confKalman<<std::endl;
+
         if(currBB)
         {
             delete currBB;
@@ -575,9 +595,7 @@ void TLD::fuseHypotheses()
         currConf = confDetector;
         std::cout<<"scelto detectorBB"<<endl;
     }
-    //DEBUG
-    //printf("ok fuse\n");
-    //FINE
+
     /*
     float var = CalculateVariance(patch.values, nn->patch_size*nn->patch_size);
 
@@ -585,6 +603,7 @@ void TLD::fuseHypotheses()
         printf("%f, %f: Variance too low \n", var, classifier->min_var);
         valid = 0;
     }*/
+    std::cout<<"fine fuse ipotesi"<<std::endl;
 }
 
 void TLD::initialLearning()

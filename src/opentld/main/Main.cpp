@@ -96,10 +96,6 @@ void Main::doWork()
         Rect bb = tldArrayToRect(initialBB);
 
         printf("Starting at %d %d %d %d\n", bb.x, bb.y, bb.width, bb.height);
-
-        //DEBUG
-        //printf("ok nella bounding box\n");
-        //FINE
         
         tld->selectObject(grey, &bb);
         skipProcessingOnce = true;
@@ -289,6 +285,11 @@ void Main::doWork()
             reuseFrameOnce = false;
         }
     }
+
+    float acc = tld->metric.mota();
+    float prec = tld->metric.motp();
+    std::cout<<"\nmota : "<< acc << std::endl;
+    std::cout<<"motp : "<< prec << std::endl;
 
     cvReleaseImage(&img);
     img = NULL;

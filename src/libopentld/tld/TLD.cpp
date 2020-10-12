@@ -41,6 +41,16 @@ Metrics::Metrics()
 
 }
 
+Metrics::~Metrics()
+{
+    misses.clear();
+    falsePostives.clear();
+    mismatches.clear();
+    nmatches.clear(); //matches for frame t
+    distances.clear(); //sum of distances for frame t
+    matches.clear();
+}
+
 
 float Metrics::distanceCalculate(float x1, float y1, float x2, float y2)
 {
@@ -64,24 +74,15 @@ void Metrics::processFrame(cv::Rect object, cv::Rect hypotesisMFT, cv::Rect hypo
     int result = 0;
     char str1;
     char str2;
-    //std::cout<<"dist mdf: "<<distMFT<<"dist k: "<<distK<<std::endl;
     if(distMFT<= distK)
     {
         matches.push_back('m');
         dim = matches.size();
-
-        //std::cout<<"dim : "<<dim<<std::endl;
-        //int i;
-        //for(i=0;i<matches.size(); i++){
-            //std::cout<<"matches: "<<matches[i]<<std::endl;
-        //}
         
         if (dim>1)
         {
             dim--;
             prec = dim-1;
-            //std::cout<<"dim : "<<dim<<std::endl;
-            //std::cout<<"prec : "<<prec<<std::endl;
             str1 = matches.at(dim);
             str2 = matches.at(prec);
             result = strcmp(&str1,&str2);
@@ -98,20 +99,11 @@ void Metrics::processFrame(cv::Rect object, cv::Rect hypotesisMFT, cv::Rect hypo
         dim = matches.size();
 
 
-        //std::cout<<"dim : "<<dim<<std::endl;
-        //int i;
-        //for(i=0;i<matches.size(); i++){
-            //std::cout<<"matches: "<<matches[i]<<std::endl;
-        //}
-
-
         if (dim>1)
         {
             
             dim--;
             prec = dim-1;
-            //std::cout<<"dim : "<<dim<<std::endl;
-            //std::cout<<"prec : "<<prec<<std::endl;
             str1 = matches[dim];
             str2 = matches[prec];
             result = strcmp(&str1,&str2);
@@ -124,6 +116,7 @@ void Metrics::processFrame(cv::Rect object, cv::Rect hypotesisMFT, cv::Rect hypo
     }    
     
     nmatches.push_back(1);
+    misses.push_back(0);
     falsePostives.push_back(1);
     distances.push_back(distK+distMFT);
     
@@ -152,7 +145,6 @@ float Metrics::mota()
     int sumMismatches = 0;
     int nObjects = 0;
     int n = matches.size(); // we always have a match
-
     for (i=0;i<n;i++)
     {
         sumMisses += misses[i];
@@ -171,183 +163,181 @@ KalmanTracker::KalmanTracker()
         kf = cv::KalmanFilter(stateSize, measSize, contrSize, type);
         state = cv::Mat(stateSize, 1, type);  // [x,y,v_x,v_y,w,h]
         meas = cv::Mat(measSize, 1, type);    // [z_x,z_y,z_w,z_h]
-        //DEBUG
-        //printf("ok costruttore kalman\n");
-        //FINE
     }
-    KalmanTracker::~KalmanTracker(){
-        delete kalmanBB;
-        kalmanBB = NULL;
+
+KalmanTracker::~KalmanTracker(){
+    delete kalmanBB;
+    kalmanBB = NULL;
+    
+}
+
+void KalmanTracker::release()
+{
+    delete kalmanBB;
+    kalmanBB = NULL;
+    
+}
+
+void KalmanTracker::init(cv::Rect *prevBB){
+
+    kalmanBB = new Rect(0, 0, 0, 0);
+    kalmanBB->width = prevBB->width;
+    kalmanBB->height = prevBB->height;
+    //kalmanBB->x = prevBB->x - prevBB->width / 2;
+    //kalmanBB->y = prevBB->y - prevBB->height / 2;
+    kalmanBB->x = prevBB->x;
+    kalmanBB->y = prevBB->y;
+    ticks = 0;
+    
+    //cv::Mat procNoise(stateSize, 1, type)
+    // [E_x,E_y,E_v_x,E_v_y,E_w,E_h]
+
+    // Transition State Matrix A
+    // Note: set dT at each processing step!
+    // [ 1 0 dT 0  0 0 ]
+    // [ 0 1 0  dT 0 0 ]
+    // [ 0 0 1  0  0 0 ]
+    // [ 0 0 0  1  0 0 ]
+    // [ 0 0 0  0  1 0 ]
+    // [ 0 0 0  0  0 1 ]
+    cv::setIdentity(kf.transitionMatrix);
+
+    // Measure Matrix H
+    // [ 1 0 0 0 0 0 ]
+    // [ 0 1 0 0 0 0 ]
+    // [ 0 0 0 0 1 0 ]
+    // [ 0 0 0 0 0 1 ]
+    kf.measurementMatrix = cv::Mat::zeros(measSize, stateSize, type);
+    kf.measurementMatrix.at<float>(0) = 1.0f;
+    kf.measurementMatrix.at<float>(7) = 1.0f;
+    kf.measurementMatrix.at<float>(16) = 1.0f;
+    kf.measurementMatrix.at<float>(23) = 1.0f;
+
+    // Process Noise Covariance Matrix Q
+    // [ Ex   0   0     0     0    0  ]
+    // [ 0    Ey  0     0     0    0  ]
+    // [ 0    0   Ev_x  0     0    0  ]
+    // [ 0    0   0     Ev_y  0    0  ]
+    // [ 0    0   0     0     Ew   0  ]
+    // [ 0    0   0     0     0    Eh ]
+    //cv::setIdentity(kf.processNoiseCov, cv::Scalar(1e-2));
+    kf.processNoiseCov.at<float>(0) = 1e-2;
+    kf.processNoiseCov.at<float>(7) = 1e-2;
+    kf.processNoiseCov.at<float>(14) = 5.0f;
+    kf.processNoiseCov.at<float>(21) = 5.0f;
+    kf.processNoiseCov.at<float>(28) = 1e-2;
+    kf.processNoiseCov.at<float>(35) = 1e-2;
+
+    // Measures Noise Covariance Matrix R
+    cv::setIdentity(kf.measurementNoiseCov, cv::Scalar(1e-1));
+    // <<<< Kalman Filter
+
+    double precTick = ticks;
+    ticks = (double) cv::getTickCount();
+    double dT = (ticks - precTick) / cv::getTickFrequency(); //seconds
+
+    meas.at<float>(0) =prevBB->x + prevBB->width / 2;
+    meas.at<float>(1) = prevBB->y + prevBB->height / 2;
+    meas.at<float>(2) = (float)prevBB->width;
+    meas.at<float>(3) = (float)prevBB->height;
+    //meas.at<float>(0) =prevBB->x;
+    //meas.at<float>(1) = prevBB->y;
+    //meas.at<float>(2) = prevBB->width + prevBB->x -1;
+    //meas.at<float>(3) = prevBB->height + prevBB->y -1;
+
+    // >>>> Initialization
+    kf.errorCovPre.at<float>(0) = 1; // px
+    kf.errorCovPre.at<float>(7) = 1; // px
+    kf.errorCovPre.at<float>(14) = 1;
+    kf.errorCovPre.at<float>(21) = 1;
+    kf.errorCovPre.at<float>(28) = 1; // px
+    kf.errorCovPre.at<float>(35) = 1; // px
+
+    state.at<float>(0) = meas.at<float>(0);
+    state.at<float>(1) = meas.at<float>(1);
+    state.at<float>(2) = 0;
+    state.at<float>(3) = 0;
+    state.at<float>(4) = meas.at<float>(2);
+    state.at<float>(5) = meas.at<float>(3);
+    // <<<< Initialization
+
+    kf.statePost = state;
+
+    //DEBUG
+    //printf("ok init kalman\n");
+    //FINE
+}
+
+void KalmanTracker::track(const cv::Mat &currImg, cv::Rect *prevBB)
+{
+    //DEBUG
+    //printf("in kalman track\n");
+    //FINE
+    if(prevBB->width <= 0 || prevBB->height <= 0)
+    {
+        return;
+    }
+
+    double precTick = ticks;
+    //ticks = (double) cv::getTickCount();
+    double dT = (ticks - precTick) / cv::getTickFrequency(); //seconds
+
+    // >>>> Matrix A
+    kf.transitionMatrix.at<float>(2) = dT;
+    kf.transitionMatrix.at<float>(9) = dT;
+    // <<<< Matrix A
+
+    //cout << "dT:" << endl << dT << endl;
+
+    state = kf.predict();
+    //cout << "State post:" << endl << state << endl;
+    //cout << typeid(kalmanBB->width).name() << endl;
+    //cout << typeid(state.at<float>(4)).name() << endl;
+    //cout <<"state at 4 " <<(state.at<float>(4)) << endl;
+    //cout <<"width"<< kalmanBB->width << endl;
+    //cout << "state at 5"<<state.at<float>(5) << endl;
+    //cout <<"height"<< kalmanBB->height << endl;
+
+    cout <<"prev bb w "<< prevBB->width << endl;
+    cout <<"prev bb h "<< prevBB->height << endl;
+    cout <<"prev bb x "<< prevBB->x << endl;
+    cout <<"prev bb y "<< prevBB->y << endl;
+
+    float w = floor(state.at<float>(4));
+    float h = floor(state.at<float>(5));
+    float x = floor(state.at<float>(0) - w /2);
+    float y = floor(state.at<float>(1) - h /2);
+
+    if(x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > currImg.cols || y + h > currImg.rows || x != x || y != y || w != w || h != h) //x!=x is check for nan
+    {
+        //Leave it empty
+        //printf("nada\n");
         
     }
-
-    void KalmanTracker::release()
+    else
     {
-        delete kalmanBB;
-        kalmanBB = NULL;
-        
-    }
-
-    void KalmanTracker::init(cv::Rect *prevBB){
-
-        kalmanBB = new Rect(0, 0, 0, 0);
-        kalmanBB->width = prevBB->width;
-        kalmanBB->height = prevBB->height;
-        //kalmanBB->x = prevBB->x - prevBB->width / 2;
-        //kalmanBB->y = prevBB->y - prevBB->height / 2;
-        kalmanBB->x = prevBB->x;
-        kalmanBB->y = prevBB->y;
-        ticks = 0;
-        
-        //cv::Mat procNoise(stateSize, 1, type)
-        // [E_x,E_y,E_v_x,E_v_y,E_w,E_h]
-    
-        // Transition State Matrix A
-        // Note: set dT at each processing step!
-        // [ 1 0 dT 0  0 0 ]
-        // [ 0 1 0  dT 0 0 ]
-        // [ 0 0 1  0  0 0 ]
-        // [ 0 0 0  1  0 0 ]
-        // [ 0 0 0  0  1 0 ]
-        // [ 0 0 0  0  0 1 ]
-        cv::setIdentity(kf.transitionMatrix);
-    
-        // Measure Matrix H
-        // [ 1 0 0 0 0 0 ]
-        // [ 0 1 0 0 0 0 ]
-        // [ 0 0 0 0 1 0 ]
-        // [ 0 0 0 0 0 1 ]
-        kf.measurementMatrix = cv::Mat::zeros(measSize, stateSize, type);
-        kf.measurementMatrix.at<float>(0) = 1.0f;
-        kf.measurementMatrix.at<float>(7) = 1.0f;
-        kf.measurementMatrix.at<float>(16) = 1.0f;
-        kf.measurementMatrix.at<float>(23) = 1.0f;
-    
-        // Process Noise Covariance Matrix Q
-        // [ Ex   0   0     0     0    0  ]
-        // [ 0    Ey  0     0     0    0  ]
-        // [ 0    0   Ev_x  0     0    0  ]
-        // [ 0    0   0     Ev_y  0    0  ]
-        // [ 0    0   0     0     Ew   0  ]
-        // [ 0    0   0     0     0    Eh ]
-        //cv::setIdentity(kf.processNoiseCov, cv::Scalar(1e-2));
-        kf.processNoiseCov.at<float>(0) = 1e-2;
-        kf.processNoiseCov.at<float>(7) = 1e-2;
-        kf.processNoiseCov.at<float>(14) = 5.0f;
-        kf.processNoiseCov.at<float>(21) = 5.0f;
-        kf.processNoiseCov.at<float>(28) = 1e-2;
-        kf.processNoiseCov.at<float>(35) = 1e-2;
-    
-        // Measures Noise Covariance Matrix R
-        cv::setIdentity(kf.measurementNoiseCov, cv::Scalar(1e-1));
-        // <<<< Kalman Filter
-
-        double precTick = ticks;
-        ticks = (double) cv::getTickCount();
-        double dT = (ticks - precTick) / cv::getTickFrequency(); //seconds
-
-        meas.at<float>(0) =prevBB->x + prevBB->width / 2;
-        meas.at<float>(1) = prevBB->y + prevBB->height / 2;
-        meas.at<float>(2) = (float)prevBB->width;
-        meas.at<float>(3) = (float)prevBB->height;
-        //meas.at<float>(0) =prevBB->x;
-        //meas.at<float>(1) = prevBB->y;
-        //meas.at<float>(2) = prevBB->width + prevBB->x -1;
-        //meas.at<float>(3) = prevBB->height + prevBB->y -1;
-
-        // >>>> Initialization
-        kf.errorCovPre.at<float>(0) = 1; // px
-        kf.errorCovPre.at<float>(7) = 1; // px
-        kf.errorCovPre.at<float>(14) = 1;
-        kf.errorCovPre.at<float>(21) = 1;
-        kf.errorCovPre.at<float>(28) = 1; // px
-        kf.errorCovPre.at<float>(35) = 1; // px
-
-        state.at<float>(0) = meas.at<float>(0);
-        state.at<float>(1) = meas.at<float>(1);
-        state.at<float>(2) = 0;
-        state.at<float>(3) = 0;
-        state.at<float>(4) = meas.at<float>(2);
-        state.at<float>(5) = meas.at<float>(3);
-        // <<<< Initialization
-
-        kf.statePost = state;
-
-        //DEBUG
-        //printf("ok init kalman\n");
+        kalmanBB = new Rect(x, y, w, h);
+            //DEBUG
+        printf("ok kalman track\n");
         //FINE
     }
 
-    void KalmanTracker::track(const cv::Mat &currImg, cv::Rect *prevBB)
-    {
-        //DEBUG
-        //printf("in kalman track\n");
-        //FINE
-        if(prevBB->width <= 0 || prevBB->height <= 0)
-        {
-            return;
-        }
+    //cout <<"height"<< h << "\n" << endl;
+    //cout <<"width"<< w << "\n" << endl;
+    //cout <<"x" << x << "\n"<< endl;
+    //cout << "y" << y << "\n" << endl;
 
-        double precTick = ticks;
-        //ticks = (double) cv::getTickCount();
-        double dT = (ticks - precTick) / cv::getTickFrequency(); //seconds
+    
+}
 
-        // >>>> Matrix A
-        kf.transitionMatrix.at<float>(2) = dT;
-        kf.transitionMatrix.at<float>(9) = dT;
-        // <<<< Matrix A
-
-        //cout << "dT:" << endl << dT << endl;
-
-        state = kf.predict();
-        //cout << "State post:" << endl << state << endl;
-        //cout << typeid(kalmanBB->width).name() << endl;
-        //cout << typeid(state.at<float>(4)).name() << endl;
-        //cout <<"state at 4 " <<(state.at<float>(4)) << endl;
-        //cout <<"width"<< kalmanBB->width << endl;
-        //cout << "state at 5"<<state.at<float>(5) << endl;
-        //cout <<"height"<< kalmanBB->height << endl;
- 
-        cout <<"prev bb w "<< prevBB->width << endl;
-        cout <<"prev bb h "<< prevBB->height << endl;
-        cout <<"prev bb x "<< prevBB->x << endl;
-        cout <<"prev bb y "<< prevBB->y << endl;
-
-        float w = floor(state.at<float>(4));
-        float h = floor(state.at<float>(5));
-        float x = floor(state.at<float>(0) - w /2);
-        float y = floor(state.at<float>(1) - h /2);
-
-        if(x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > currImg.cols || y + h > currImg.rows || x != x || y != y || w != w || h != h) //x!=x is check for nan
-        {
-            //Leave it empty
-            //printf("nada\n");
-           
-        }
-        else
-        {
-            kalmanBB = new Rect(x, y, w, h);
-             //DEBUG
-            printf("ok kalman track\n");
-            //FINE
-        }
-
-        //cout <<"height"<< h << "\n" << endl;
-        //cout <<"width"<< w << "\n" << endl;
-        //cout <<"x" << x << "\n"<< endl;
-        //cout << "y" << y << "\n" << endl;
-
-       
-    }
-
-    void KalmanTracker::update(const cv::Rect *bb)
-    {
-        meas.at<float>(0) = bb->x + bb->width / 2;
-        meas.at<float>(1) = bb->y + bb->height / 2;
-        meas.at<float>(2) = bb->width;
-        meas.at<float>(3) = bb->height;
-        kf.correct(meas);
-    }
+void KalmanTracker::update(const cv::Rect *bb)
+{
+    meas.at<float>(0) = bb->x + bb->width / 2;
+    meas.at<float>(1) = bb->y + bb->height / 2;
+    meas.at<float>(2) = bb->width;
+    meas.at<float>(3) = bb->height;
+    kf.correct(meas);
+}
 
 //********************************************TLD
 
@@ -404,7 +394,7 @@ TLD::~TLD()
         delete prevBB;
         prevBB = NULL;
     }
-    delete &metric;
+    //metric.~Metrics();
 }
 
 void TLD::release()
@@ -494,8 +484,9 @@ void TLD::processImage(const Mat &img)
     kalmanTracker->track(currImg,prevBB);
    
     fuseHypotheses();
-
+    std::cout<<"ok dopo fuse"<<std::endl;
     learn();
+    std::cout<<"ok dopo learn"<<std::endl;
 
 }
 
@@ -507,7 +498,11 @@ void TLD::fuseHypotheses()
     Rect *detectorBB = detectorCascade->detectionResult->detectorBB;
     Rect *kalmanBB = kalmanTracker->kalmanBB;
     std::cout<<"process frame metrcs"<<std::endl;
-    metric.processFrame(*prevBB, *trackerBB, *kalmanBB);
+    if (prevBB && trackerBB && kalmanBB)
+    {
+        metric.processFrame(*prevBB, *trackerBB, *kalmanBB);
+    }
+
     std::cout<<"dopo processframemetrics"<<std::endl;
 
     if(currBB)

@@ -57,6 +57,7 @@ class Metrics
 
 
     Metrics();
+    ~Metrics();
     //euclidean distance between the two centroids
     float distanceCalculate(float x1, float y1, float x2, float y2);
     void processFrame(cv::Rect object, cv::Rect hypotesisMFT, cv::Rect hypotesisKalman);

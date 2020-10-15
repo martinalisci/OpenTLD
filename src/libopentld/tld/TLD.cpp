@@ -38,7 +38,13 @@ namespace tld
 //*****************************************Metrica
 Metrics::Metrics()
 {
-
+    count = 0;
+    misses = std::vector<int>(1000,0);
+    falsePostives = std::vector<int>(1000,0);
+    mismatches = std::vector<int>(1000,0);
+    nmatches = std::vector<int>(1000,0);
+    distances = std::vector<float>(1000,0);
+    matches = std::vector<int>(1000,0);
 }
 
 Metrics::~Metrics()
@@ -54,7 +60,6 @@ Metrics::~Metrics()
 
 float Metrics::distanceCalculate(float x1, float y1, float x2, float y2)
 {
-
 	float x = x1 - x2; //calculating number to square in next step
 	float y = y1 - y2;
 	float dist=0.0;
@@ -64,96 +69,167 @@ float Metrics::distanceCalculate(float x1, float y1, float x2, float y2)
 	return dist;
 }
 
-void Metrics::processFrame(cv::Rect object, cv::Rect hypotesisMFT, cv::Rect hypotesisKalman)
+void Metrics::processFrame(cv::Rect object, cv::Rect hypothesisMFT, cv::Rect hypothesisKalman)
 {
-    float distMFT = distanceCalculate(object.x,object.y,hypotesisMFT.x,hypotesisMFT.y);
-    float distK = distanceCalculate(object.x,object.y,hypotesisKalman.x,hypotesisKalman.y);
+    std::cout<<"in process Frame"<<std::endl;
+    double x_prev = object.x + object.width / 2;
+    double y_prev = object.y + object.height / 2;
+    double x_tr = hypothesisMFT.x + hypothesisMFT.width / 2;
+    double y_tr = hypothesisMFT.y + hypothesisMFT.height / 2;
+    double x_k = hypothesisKalman.x + hypothesisKalman.width / 2;
+    double y_k = hypothesisKalman.y + hypothesisKalman.height / 2;
     
-    int dim = 0;
-    int prec = 0;
+    float distMFT = distanceCalculate(x_prev,y_prev,x_tr,y_tr);
+    float distK = distanceCalculate(x_prev,y_prev,x_k,y_k);
+    
     int result = 0;
     char str1;
     char str2;
-    if(distMFT<= distK)
+    //1 mft 2 k
+    std::cout<<"ok qui"<<std::endl;
+
+    if (distMFT < threshold)
     {
-        matches.push_back('m');
-        dim = matches.size();
-        
-        if (dim>1)
+        if(distMFT<= distK )
         {
-            dim--;
-            prec = dim-1;
-            str1 = matches.at(dim);
-            str2 = matches.at(prec);
+            matches[count] =1;
+            nmatches[count]=1;
+
+            if (count>1)
+            {
+                str1 = matches[count];
+                str2 = matches[count-1];
+                result = strcmp(&str1,&str2);
+                if (result!=0)
+                {
+                    mismatches[count]=1;
+                }
+                else
+                {
+                    mismatches[count]=0;
+                }
+            }
+            else
+            {
+                mismatches[count] = 0;
+            }
+
+            if( distK < threshold)
+            {
+                falsePostives[count]=1;
+                distances[count] = distK+distMFT;
+            }
+            else
+            {
+                falsePostives[count]=0;
+                distances[count] = distMFT;
+            }
+            misses[count]=0;
+            
+        }
+        //dist mft < 500 ma mft>k quindi ok
+        else 
+        {
+            matches[count]=2;
+            nmatches[count]=1;
+            
+            if (count>1)
+            {
+                str1 = matches[count];
+                str2 = matches[count-1];
+                result = strcmp(&str1,&str2);
+                if (result!=0)
+                {
+                    mismatches[count]=1;
+                }
+                else
+                {
+                    mismatches[count]=0;
+                }
+        
+            }
+            else
+            {
+                mismatches[count]=0; 
+            }
+            falsePostives[count] = 1;
+            distances[count] = distK+distMFT;
+            misses[count]=0;
+        } 
+    }
+    else if(distK < threshold)
+    {
+        matches[count]=2;
+        nmatches[count]=1;
+            
+        if (count>1)
+        {
+            str1 = matches[count];
+            str2 = matches[count-1];
             result = strcmp(&str1,&str2);
             if (result!=0)
             {
-                mismatches.push_back(1);
+                mismatches[count]=1;
+            }
+            else
+            {
+                mismatches[count]=0;
             }
         }
+        else
+        {
+            mismatches[count]=0; 
+        }
+        falsePostives[count] = 0;
+        distances[count] = distK;
+        misses[count]=0;
+        
     }
     else
     {
-        
-        matches.push_back('k');
-        dim = matches.size();
+        //entrambi > threshold
+        misses[count] = 1;
+        falsePostives[count] = 0;
+        mismatches[count] = 0;
+        nmatches[count] = 0; //matches for frame t
+        distances[count] = 0; //sum of distances for frame t
 
-
-        if (dim>1)
-        {
-            
-            dim--;
-            prec = dim-1;
-            str1 = matches[dim];
-            str2 = matches[prec];
-            result = strcmp(&str1,&str2);
-            if (result!=0)
-            {
-                mismatches.push_back(1);
-            }
-        }
-       
-    }    
+    }
     
-    nmatches.push_back(1);
-    misses.push_back(0);
-    falsePostives.push_back(1);
-    distances.push_back(distK+distMFT);
-    
+    count++;
 }
 
 float Metrics::motp()
 {
     int i = 0;
-    int sumDistances = 0;
-    int sumMatches = 0;
-    int n = matches.size(); // we always have a match
+    double sumDistances = 0;
+    double sumMatches = 0;
 
-    for(i=0; i<n; i++)
+    for(i=0; i<count; i++)
     {
-		sumDistances += distances[i];
-        sumMatches += matches[i];
+        sumDistances += distances[i];
+        sumMatches += nmatches[i];
 	}
-    return (sumDistances/sumMatches);
+    return (sumDistances/double(count));
 }
 
 float Metrics::mota()
 {
     int i = 0;
-    int sumMisses = 0;
-    int sumFp = 0;
-    int sumMismatches = 0;
-    int nObjects = 0;
-    int n = matches.size(); // we always have a match
-    for (i=0;i<n;i++)
+    double sumMisses = 0;
+    double sumFp = 0;
+    double sumMismatches = 0;
+    double sum = 0;
+
+    for (i=0;i<count;i++)
     {
         sumMisses += misses[i];
         sumFp += falsePostives[i];
         sumMismatches += mismatches[i];
-        nObjects++;
     }
+    sum = sumMismatches+sumFp+sumMisses;
 
-    return (1-((sumMisses+sumFp+sumMismatches)/nObjects));
+    return (1-((sum)/double(count)));
 }
 
 //********************************************KalmanTracker
@@ -298,10 +374,10 @@ void KalmanTracker::track(const cv::Mat &currImg, cv::Rect *prevBB)
     //cout << "state at 5"<<state.at<float>(5) << endl;
     //cout <<"height"<< kalmanBB->height << endl;
 
-    cout <<"prev bb w "<< prevBB->width << endl;
-    cout <<"prev bb h "<< prevBB->height << endl;
-    cout <<"prev bb x "<< prevBB->x << endl;
-    cout <<"prev bb y "<< prevBB->y << endl;
+    std::cout <<"prev bb w "<< prevBB->width << endl;
+    std::cout <<"prev bb h "<< prevBB->height << endl;
+    std::cout <<"prev bb x "<< prevBB->x << endl;
+    std::cout <<"prev bb y "<< prevBB->y << endl;
 
     float w = floor(state.at<float>(4));
     float h = floor(state.at<float>(5));
@@ -484,27 +560,22 @@ void TLD::processImage(const Mat &img)
     kalmanTracker->track(currImg,prevBB);
    
     fuseHypotheses();
-    std::cout<<"ok dopo fuse"<<std::endl;
-    learn();
-    std::cout<<"ok dopo learn"<<std::endl;
 
+    learn();
 }
 
 void TLD::fuseHypotheses()
 {
-    std::cout<<"fuse ipotesi"<<std::endl;
     Rect *trackerBB = medianFlowTracker->trackerBB;
     int numClusters = detectorCascade->detectionResult->numClusters;
     Rect *detectorBB = detectorCascade->detectionResult->detectorBB;
     Rect *kalmanBB = kalmanTracker->kalmanBB;
-    std::cout<<"process frame metrcs"<<std::endl;
+    
     if (prevBB && trackerBB && kalmanBB)
     {
         metric.processFrame(*prevBB, *trackerBB, *kalmanBB);
     }
-
-    std::cout<<"dopo processframemetrics"<<std::endl;
-
+    
     if(currBB)
     {
         delete currBB;
@@ -598,7 +669,6 @@ void TLD::fuseHypotheses()
         printf("%f, %f: Variance too low \n", var, classifier->min_var);
         valid = 0;
     }*/
-    std::cout<<"fine fuse ipotesi"<<std::endl;
 }
 
 void TLD::initialLearning()
@@ -665,7 +735,7 @@ void TLD::initialLearning()
 
     srand(1); //TODO: This is not guaranteed to affect random_shuffle
 
-    random_shuffle(negativeIndices.begin(), negativeIndices.end());
+    std::random_shuffle(negativeIndices.begin(), negativeIndices.end());
 
     //Choose 100 random patches for negative examples
     for(size_t i = 0; i < std::min<size_t>(100, negativeIndices.size()); i++)
@@ -798,11 +868,11 @@ void TLD::writeToFile(const char *path)
     EnsembleClassifier *ec = detectorCascade->ensembleClassifier;
 
     FILE *file = fopen(path, "w");
-    fprintf(file, "#Tld ModelExport\n");
-    fprintf(file, "%d #width\n", detectorCascade->objWidth);
-    fprintf(file, "%d #height\n", detectorCascade->objHeight);
-    fprintf(file, "%f #min_var\n", detectorCascade->varianceFilter->minVar);
-    fprintf(file, "%d #Positive Sample Size\n", nn->truePositives->size());
+    std::fprintf(file, "#Tld ModelExport\n");
+    std::fprintf(file, "%d #width\n", detectorCascade->objWidth);
+    std::fprintf(file, "%d #height\n", detectorCascade->objHeight);
+    std::fprintf(file, "%f #min_var\n", detectorCascade->varianceFilter->minVar);
+    std::fprintf(file, "%d #Positive Sample Size\n", nn->truePositives->size());
 
 
 
@@ -814,14 +884,14 @@ void TLD::writeToFile(const char *path)
         {
             for(int j = 0; j < TLD_PATCH_SIZE; j++)
             {
-                fprintf(file, "%f ", imageData[i * TLD_PATCH_SIZE + j]);
+                std::fprintf(file, "%f ", imageData[i * TLD_PATCH_SIZE + j]);
             }
 
-            fprintf(file, "\n");
+            std::fprintf(file, "\n");
         }
     }
 
-    fprintf(file, "%d #Negative Sample Size\n", nn->falsePositives->size());
+    std::fprintf(file, "%d #Negative Sample Size\n", nn->falsePositives->size());
 
     for(size_t s = 0; s < nn->falsePositives->size(); s++)
     {
@@ -831,26 +901,26 @@ void TLD::writeToFile(const char *path)
         {
             for(int j = 0; j < TLD_PATCH_SIZE; j++)
             {
-                fprintf(file, "%f ", imageData[i * TLD_PATCH_SIZE + j]);
+                std::fprintf(file, "%f ", imageData[i * TLD_PATCH_SIZE + j]);
             }
 
-            fprintf(file, "\n");
+            std::fprintf(file, "\n");
         }
     }
 
-    fprintf(file, "%d #numtrees\n", ec->numTrees);
+    std::fprintf(file, "%d #numtrees\n", ec->numTrees);
     detectorCascade->numTrees = ec->numTrees;
-    fprintf(file, "%d #numFeatures\n", ec->numFeatures);
+    std::fprintf(file, "%d #numFeatures\n", ec->numFeatures);
     detectorCascade->numFeatures = ec->numFeatures;
 
     for(int i = 0; i < ec->numTrees; i++)
     {
-        fprintf(file, "#Tree %d\n", i);
+        std::fprintf(file, "#Tree %d\n", i);
 
         for(int j = 0; j < ec->numFeatures; j++)
         {
             float *features = ec->features + 4 * ec->numFeatures * i + 4 * j;
-            fprintf(file, "%f %f %f %f # Feature %d\n", features[0], features[1], features[2], features[3], j);
+            std::fprintf(file, "%f %f %f %f # Feature %d\n", features[0], features[1], features[2], features[3], j);
         }
 
         //Collect indices
@@ -870,16 +940,16 @@ void TLD::writeToFile(const char *path)
             }
         }
 
-        fprintf(file, "%d #numLeaves\n", list.size());
+        std::fprintf(file, "%d #numLeaves\n", list.size());
 
         for(size_t j = 0; j < list.size(); j++)
         {
             TldExportEntry entry = list.at(j);
-            fprintf(file, "%d %d %d\n", entry.index, entry.P, entry.N);
+            std::fprintf(file, "%d %d %d\n", entry.index, entry.P, entry.N);
         }
     }
 
-    fclose(file);
+    std::fclose(file);
 
 }
 
@@ -900,19 +970,19 @@ void TLD::readFromFile(const char *path)
 
     int MAX_LEN = 255;
     char str_buf[255];
-    fgets(str_buf, MAX_LEN, file); /*Skip line*/
+    std::fgets(str_buf, MAX_LEN, file); /*Skip line*/
 
-    fscanf(file, "%d \n", &detectorCascade->objWidth);
-    fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
-    fscanf(file, "%d \n", &detectorCascade->objHeight);
-    fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
+    std::fscanf(file, "%d \n", &detectorCascade->objWidth);
+    std::fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
+    std::fscanf(file, "%d \n", &detectorCascade->objHeight);
+    std::fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
 
-    fscanf(file, "%f \n", &detectorCascade->varianceFilter->minVar);
-    fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
+    std::fscanf(file, "%f \n", &detectorCascade->varianceFilter->minVar);
+    std::fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
 
     int numPositivePatches;
-    fscanf(file, "%d \n", &numPositivePatches);
-    fgets(str_buf, MAX_LEN, file); /*Skip line*/
+    std::fscanf(file, "%d \n", &numPositivePatches);
+    std::fgets(str_buf, MAX_LEN, file); /*Skip line*/
 
 
     for(int s = 0; s < numPositivePatches; s++)
@@ -922,7 +992,7 @@ void TLD::readFromFile(const char *path)
         for(int i = 0; i < 15; i++)   //Do 15 times
         {
 
-            fgets(str_buf, MAX_LEN, file); /*Read sample*/
+            std::fgets(str_buf, MAX_LEN, file); /*Read sample*/
 
             char *pch;
             pch = strtok(str_buf, " \n");
@@ -943,8 +1013,8 @@ void TLD::readFromFile(const char *path)
     }
 
     int numNegativePatches;
-    fscanf(file, "%d \n", &numNegativePatches);
-    fgets(str_buf, MAX_LEN, file); /*Skip line*/
+    std::fscanf(file, "%d \n", &numNegativePatches);
+    std::fgets(str_buf, MAX_LEN, file); /*Skip line*/
 
 
     for(int s = 0; s < numNegativePatches; s++)
@@ -954,7 +1024,7 @@ void TLD::readFromFile(const char *path)
         for(int i = 0; i < 15; i++)   //Do 15 times
         {
 
-            fgets(str_buf, MAX_LEN, file); /*Read sample*/
+            std::fgets(str_buf, MAX_LEN, file); /*Read sample*/
 
             char *pch;
             pch = strtok(str_buf, " \n");
@@ -974,13 +1044,13 @@ void TLD::readFromFile(const char *path)
         nn->falsePositives->push_back(patch);
     }
 
-    fscanf(file, "%d \n", &ec->numTrees);
+    std::fscanf(file, "%d \n", &ec->numTrees);
     detectorCascade->numTrees = ec->numTrees;
-    fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
+    std::fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
 
-    fscanf(file, "%d \n", &ec->numFeatures);
+    std::fscanf(file, "%d \n", &ec->numFeatures);
     detectorCascade->numFeatures = ec->numFeatures;
-    fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
+    std::fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
 
     int size = 2 * 2 * ec->numFeatures * ec->numTrees;
     ec->features = new float[size];
@@ -989,24 +1059,24 @@ void TLD::readFromFile(const char *path)
 
     for(int i = 0; i < ec->numTrees; i++)
     {
-        fgets(str_buf, MAX_LEN, file); /*Skip line*/
+        std::fgets(str_buf, MAX_LEN, file); /*Skip line*/
 
         for(int j = 0; j < ec->numFeatures; j++)
         {
             float *features = ec->features + 4 * ec->numFeatures * i + 4 * j;
-            fscanf(file, "%f %f %f %f", &features[0], &features[1], &features[2], &features[3]);
-            fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
+            std::fscanf(file, "%f %f %f %f", &features[0], &features[1], &features[2], &features[3]);
+            std::fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
         }
 
         /* read number of leaves*/
         int numLeaves;
-        fscanf(file, "%d \n", &numLeaves);
-        fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
+        std::fscanf(file, "%d \n", &numLeaves);
+        std::fgets(str_buf, MAX_LEN, file); /*Skip rest of line*/
 
         for(int j = 0; j < numLeaves; j++)
         {
             TldExportEntry entry;
-            fscanf(file, "%d %d %d \n", &entry.index, &entry.P, &entry.N);
+            std::fscanf(file, "%d %d %d \n", &entry.index, &entry.P, &entry.N);
             ec->updatePosterior(i, entry.index, 1, entry.P);
             ec->updatePosterior(i, entry.index, 0, entry.N);
         }
@@ -1021,7 +1091,7 @@ void TLD::readFromFile(const char *path)
 
     ec->initFeatureOffsets();
 
-    fclose(file);
+    std::fclose(file);
 }
 
 

@@ -40,162 +40,92 @@ Metrics::Metrics()
 {
     count = 0;
     misses = std::vector<int>(1000,0);
-    falsePostives = std::vector<int>(1000,0);
     mismatches = std::vector<int>(1000,0);
     nmatches = std::vector<int>(1000,0);
     distances = std::vector<float>(1000,0);
-    matches = std::vector<int>(1000,0);
 }
 
 Metrics::~Metrics()
 {
     misses.clear();
-    falsePostives.clear();
     mismatches.clear();
     nmatches.clear(); //matches for frame t
     distances.clear(); //sum of distances for frame t
-    matches.clear();
+
 }
 
 
-float Metrics::distanceCalculate(float x1, float y1, float x2, float y2)
+float Metrics::iou(cv::Rect obj1, cv::Rect obj2)
 {
-	float x = x1 - x2; //calculating number to square in next step
-	float y = y1 - y2;
-	float dist=0.0;
-	dist = pow(x, 2) + pow(y, 2);     //calculating Euclidean distance
-	dist = sqrt(dist);        
+    //determine the coordinates of the intersection rectangle
+    int x_left = 0;
+    int y_top = 0;
+    int x_right = 0;
+    int y_bottom = 0;
+    float intersection_area= 0.0;
+    float bb1_area = 0.0;
+    float bb2_area = 0.0;
+    float iou = 0.0;
+
+    int xt1 = obj1.x;
+    int yt1 = obj1.y;
+    int yb1 = obj1.y+(obj1.height);
+    int xr1 = obj1.x+(obj1.width);
+
+    int xt2 = obj2.x;
+    int yt2 = obj2.y;
+    int yb2 = obj2.y+(obj2.height);
+    int xr2 = obj2.x+(obj2.width);
+
+    x_left = max(xt1,xt2);
+    y_top = max(yt1,yt2);
+    x_right = min(xr1, xr2);
+    y_bottom = min(yb1, yb2);
+
+    if (x_right < x_left or y_bottom < y_top)
+    {
+        return 0.0;
+    }
+
+    //The intersection of two axis-aligned bounding boxes is always an
+    //axis-aligned bounding box
+    intersection_area = (x_right - x_left) * (y_bottom - y_top);
+
+    //compute the area of both AABBs
+    bb1_area = (obj1.width * obj1.height);
+    bb2_area = (obj2.width * obj2.height);
+
+    //compute the intersection over union by taking the intersection
+    //area and dividing it by the sum of prediction + ground-truth
+    //areas - the interesection area
+    iou = intersection_area / float(bb1_area + bb2_area - intersection_area);
     
-	return dist;
+	return iou;
 }
 
-void Metrics::processFrame(cv::Rect object, cv::Rect hypothesisMFT, cv::Rect hypothesisKalman)
+void Metrics::processFrame(cv::Rect object, cv::Rect hypothesis)
 {
-    std::cout<<"in process Frame"<<std::endl;
-    double x_prev = object.x + object.width / 2;
-    double y_prev = object.y + object.height / 2;
-    double x_tr = hypothesisMFT.x + hypothesisMFT.width / 2;
-    double y_tr = hypothesisMFT.y + hypothesisMFT.height / 2;
-    double x_k = hypothesisKalman.x + hypothesisKalman.width / 2;
-    double y_k = hypothesisKalman.y + hypothesisKalman.height / 2;
-    
-    float distMFT = distanceCalculate(x_prev,y_prev,x_tr,y_tr);
-    float distK = distanceCalculate(x_prev,y_prev,x_k,y_k);
-    
-    int result = 0;
-    char str1;
-    char str2;
-    //1 mft 2 k
-    std::cout<<"ok qui"<<std::endl;
-
-    if (distMFT < threshold)
+    float overlapp = iou(object,hypothesis);;
+    std::cout<<"overlap : "<<overlapp<<std::endl;
+    if (overlapp<0.80)
     {
-        if(distMFT<= distK )
-        {
-            matches[count] =1;
-            nmatches[count]=1;
-
-            if (count>1)
-            {
-                str1 = matches[count];
-                str2 = matches[count-1];
-                result = strcmp(&str1,&str2);
-                if (result!=0)
-                {
-                    mismatches[count]=1;
-                }
-                else
-                {
-                    mismatches[count]=0;
-                }
-            }
-            else
-            {
-                mismatches[count] = 0;
-            }
-
-            if( distK < threshold)
-            {
-                falsePostives[count]=1;
-                distances[count] = distK+distMFT;
-            }
-            else
-            {
-                falsePostives[count]=0;
-                distances[count] = distMFT;
-            }
-            misses[count]=0;
-            
-        }
-        //dist mft < 500 ma mft>k quindi ok
-        else 
-        {
-            matches[count]=2;
-            nmatches[count]=1;
-            
-            if (count>1)
-            {
-                str1 = matches[count];
-                str2 = matches[count-1];
-                result = strcmp(&str1,&str2);
-                if (result!=0)
-                {
-                    mismatches[count]=1;
-                }
-                else
-                {
-                    mismatches[count]=0;
-                }
-        
-            }
-            else
-            {
-                mismatches[count]=0; 
-            }
-            falsePostives[count] = 1;
-            distances[count] = distK+distMFT;
-            misses[count]=0;
-        } 
-    }
-    else if(distK < threshold)
-    {
-        matches[count]=2;
-        nmatches[count]=1;
-            
-        if (count>1)
-        {
-            str1 = matches[count];
-            str2 = matches[count-1];
-            result = strcmp(&str1,&str2);
-            if (result!=0)
-            {
-                mismatches[count]=1;
-            }
-            else
-            {
-                mismatches[count]=0;
-            }
-        }
-        else
-        {
-            mismatches[count]=0; 
-        }
-        falsePostives[count] = 0;
-        distances[count] = distK;
-        misses[count]=0;
-        
-    }
+        mismatches[count] = 1;
+    }  
     else
     {
-        //entrambi > threshold
-        misses[count] = 1;
-        falsePostives[count] = 0;
-        mismatches[count] = 0;
-        nmatches[count] = 0; //matches for frame t
-        distances[count] = 0; //sum of distances for frame t
-
+        double x_prev = object.x + object.width / 2;
+        double y_prev = object.y + object.height / 2;
+        double x_tr = hypothesis.x + hypothesis.width / 2;
+        double y_tr = hypothesis.y + hypothesis.height / 2;
+        float x = x_prev - x_tr; //calculating number to square in next step
+        float y = y_prev - y_tr;
+        float dist=0.0;
+        dist = pow(x, 2) + pow(y, 2);     //calculating Euclidean distance
+        dist = sqrt(dist);
+        nmatches[count] = 1;
+        distances[count] = dist;
     }
-    
+          
     count++;
 }
 
@@ -210,25 +140,27 @@ float Metrics::motp()
         sumDistances += distances[i];
         sumMatches += nmatches[i];
 	}
-    return (sumDistances/double(count));
+    std::cout<<sumDistances<<std::endl;
+    std::cout<<sumMatches<<std::endl;
+
+    return (sumDistances/sumMatches);
 }
 
 float Metrics::mota()
 {
     int i = 0;
     double sumMisses = 0;
-    double sumFp = 0;
     double sumMismatches = 0;
     double sum = 0;
 
     for (i=0;i<count;i++)
     {
         sumMisses += misses[i];
-        sumFp += falsePostives[i];
         sumMismatches += mismatches[i];
     }
-    sum = sumMismatches+sumFp+sumMisses;
-
+    std::cout<<sumMismatches<<std::endl;
+    std::cout<<sumMisses<<std::endl;
+    sum = sumMismatches+sumMisses;
     return (1-((sum)/double(count)));
 }
 
@@ -316,10 +248,6 @@ void KalmanTracker::init(cv::Rect *prevBB){
     meas.at<float>(1) = prevBB->y + prevBB->height / 2;
     meas.at<float>(2) = (float)prevBB->width;
     meas.at<float>(3) = (float)prevBB->height;
-    //meas.at<float>(0) =prevBB->x;
-    //meas.at<float>(1) = prevBB->y;
-    //meas.at<float>(2) = prevBB->width + prevBB->x -1;
-    //meas.at<float>(3) = prevBB->height + prevBB->y -1;
 
     // >>>> Initialization
     kf.errorCovPre.at<float>(0) = 1; // px
@@ -338,17 +266,10 @@ void KalmanTracker::init(cv::Rect *prevBB){
     // <<<< Initialization
 
     kf.statePost = state;
-
-    //DEBUG
-    //printf("ok init kalman\n");
-    //FINE
 }
 
 void KalmanTracker::track(const cv::Mat &currImg, cv::Rect *prevBB)
 {
-    //DEBUG
-    //printf("in kalman track\n");
-    //FINE
     if(prevBB->width <= 0 || prevBB->height <= 0)
     {
         return;
@@ -366,19 +287,7 @@ void KalmanTracker::track(const cv::Mat &currImg, cv::Rect *prevBB)
     //cout << "dT:" << endl << dT << endl;
 
     state = kf.predict();
-    //cout << "State post:" << endl << state << endl;
-    //cout << typeid(kalmanBB->width).name() << endl;
-    //cout << typeid(state.at<float>(4)).name() << endl;
-    //cout <<"state at 4 " <<(state.at<float>(4)) << endl;
-    //cout <<"width"<< kalmanBB->width << endl;
-    //cout << "state at 5"<<state.at<float>(5) << endl;
-    //cout <<"height"<< kalmanBB->height << endl;
-
-    std::cout <<"prev bb w "<< prevBB->width << endl;
-    std::cout <<"prev bb h "<< prevBB->height << endl;
-    std::cout <<"prev bb x "<< prevBB->x << endl;
-    std::cout <<"prev bb y "<< prevBB->y << endl;
-
+    
     float w = floor(state.at<float>(4));
     float h = floor(state.at<float>(5));
     float x = floor(state.at<float>(0) - w /2);
@@ -387,22 +296,15 @@ void KalmanTracker::track(const cv::Mat &currImg, cv::Rect *prevBB)
     if(x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > currImg.cols || y + h > currImg.rows || x != x || y != y || w != w || h != h) //x!=x is check for nan
     {
         //Leave it empty
-        //printf("nada\n");
         
     }
     else
     {
         kalmanBB = new Rect(x, y, w, h);
-            //DEBUG
+        //DEBUG
         printf("ok kalman track\n");
         //FINE
     }
-
-    //cout <<"height"<< h << "\n" << endl;
-    //cout <<"width"<< w << "\n" << endl;
-    //cout <<"x" << x << "\n"<< endl;
-    //cout << "y" << y << "\n" << endl;
-
     
 }
 
@@ -470,7 +372,6 @@ TLD::~TLD()
         delete prevBB;
         prevBB = NULL;
     }
-    //metric.~Metrics();
 }
 
 void TLD::release()
@@ -507,6 +408,7 @@ void TLD::storeCurrentData()
 
     detectorCascade->cleanPreviousData(); //Reset detector results
     medianFlowTracker->cleanPreviousData();
+    kalmanTracker->release();
 
     wasValid = valid;
 }
@@ -549,15 +451,14 @@ void TLD::processImage(const Mat &img)
     if(trackerEnabled)
     {
         medianFlowTracker->track(prevImg, currImg, prevBB);
+        kalmanTracker->ticks = (double) cv::getTickCount();
+        kalmanTracker->track(currImg,prevBB);
     }
 
     if(detectorEnabled && (!alternating || medianFlowTracker->trackerBB == NULL))
     {
         detectorCascade->detect(grey_frame);
     }
-   
-    kalmanTracker->ticks = (double) cv::getTickCount();
-    kalmanTracker->track(currImg,prevBB);
    
     fuseHypotheses();
 
@@ -571,10 +472,6 @@ void TLD::fuseHypotheses()
     Rect *detectorBB = detectorCascade->detectionResult->detectorBB;
     Rect *kalmanBB = kalmanTracker->kalmanBB;
     
-    if (prevBB && trackerBB && kalmanBB)
-    {
-        metric.processFrame(*prevBB, *trackerBB, *kalmanBB);
-    }
     
     if(currBB)
     {
@@ -589,8 +486,8 @@ void TLD::fuseHypotheses()
     if(numClusters == 1)
     {
         confDetector = nnClassifier->classifyBB(currImg, detectorBB);
+        std::cout<<"conf detector: "<<confDetector<<std::endl;
     }
-
 
     if(trackerBB != NULL)
     {
@@ -615,12 +512,8 @@ void TLD::fuseHypotheses()
         }
         else if (kalmanBB != NULL && confKalman>=0.85 && confKalman >=confTracker )
         {
-            //float currentRatio = currBB->height/currBB->width;
-            //float previousRatio = prevBB->height/prevBB->width;
-            //if (currentRatio == previousRatio){
             currConf = confKalman;
             currBB = tldCopyRect(kalmanBB);
-            //}
             kalmanTracker->update(kalmanBB);
             std::cout<<"kalman aggiornato con kalmanBB"<<endl;
         }
@@ -661,7 +554,19 @@ void TLD::fuseHypotheses()
         currConf = confDetector;
         std::cout<<"scelto detectorBB"<<endl;
     }
-
+    
+    //mettere detectorBB al posto di prevBB
+    if(detectorBB && currBB)
+    {
+        metric.processFrame(*detectorBB, *currBB);
+    }
+    else
+    {
+        metric.misses.at(metric.count) = 1;
+        metric.count++;
+    }
+    
+    
     /*
     float var = CalculateVariance(patch.values, nn->patch_size*nn->patch_size);
 
@@ -747,9 +652,6 @@ void TLD::initialLearning()
         patch.positive = 0;
         patches.push_back(patch);
     }
-    //DEBUG
-    //printf("ok initial learning\n");
-    //FINE
     detectorCascade->nnClassifier->learn(patches);
 
     delete[] overlap;

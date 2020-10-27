@@ -40,11 +40,11 @@ class Metrics
     public:
         //centroids are stored
         std::vector<int> misses;
-        std::vector<int> falsePostives;
+        //std::vector<int> falsePostives;
         std::vector<int> mismatches;
         std::vector<int> nmatches; //matches for frame t
         std::vector<float> distances; //sum of distances for frame t
-        std::vector<int> matches;
+        //std::vector<int> matches;
         int count;
         //correspondence
         double threshold =  500;
@@ -53,8 +53,8 @@ class Metrics
     Metrics();
     ~Metrics();
     //euclidean distance between the two centroids
-    float distanceCalculate(float x1, float y1, float x2, float y2);
-    void processFrame(cv::Rect object, cv::Rect hypothesisMFT, cv::Rect hypothesisKalman);
+    float iou(cv::Rect obj1, cv::Rect obj2);
+    void processFrame(cv::Rect object, cv::Rect hypothesis);
     float mota();
     float motp();
 

@@ -1,0 +1,4 @@
+# Hashes of file build rules.
+72aec20e0d486d8e9faf835605023dd5 src/opentld/qopentld/moc_ConfigDialog.cxx
+2fbaa0c82317aa07da8a3975b5caf070 src/opentld/qrc_rcs.cxx
+4f741916f5b01d1a70282c027badcc02 src/opentld/ui_ConfigDialog.h

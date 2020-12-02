@@ -28,6 +28,7 @@
 #define TLD_H_
 
 #include <opencv/cv.h>
+#include <fstream>
 
 #include "MedianFlowTracker.h"
 #include "DetectorCascade.h"
@@ -40,11 +41,10 @@ class Metrics
     public:
         //centroids are stored
         std::vector<int> misses;
-        //std::vector<int> falsePostives;
         std::vector<int> mismatches;
         std::vector<int> nmatches; //matches for frame t
         std::vector<float> distances; //sum of distances for frame t
-        //std::vector<int> matches;
+        std::vector<cv::Rect> realPositions;
         int count;
         //correspondence
         double threshold =  500;
@@ -54,7 +54,7 @@ class Metrics
     ~Metrics();
     //euclidean distance between the two centroids
     float iou(cv::Rect obj1, cv::Rect obj2);
-    void processFrame(cv::Rect object, cv::Rect hypothesis);
+    void processFrame(cv::Rect hypothesis);
     float mota();
     float motp();
 

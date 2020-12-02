@@ -43,6 +43,27 @@ Metrics::Metrics()
     mismatches = std::vector<int>(1000,0);
     nmatches = std::vector<int>(1000,0);
     distances = std::vector<float>(1000,0);
+    
+    string line;
+    ifstream myfile;
+    myfile.open("/../../OpenTLD-master/videos/bb.txt");
+    if(myfile.is_open())
+    {
+        while (getline (myfile,line))
+        {
+            string x = line.substr(0,line.find(","));
+            line.erase(0,line.find(","+1));
+            string y = line.substr(0,line.find(","));
+            line.erase(0,line.find(","+1));
+            string w = line.substr(0,line.find(","));
+            line.erase(0,line.find(","+1));
+            string h = line.substr(0,line.find(","));
+            realPositions.push_back(cv::Rect(stoi(x), stoi(y), stoi(w), stoi(w)));
+        }
+        myfile.close();
+
+    }
+    else std::cout<<"Unable to open file bb.txt"<<std::endl;
 }
 
 Metrics::~Metrics()
@@ -103,18 +124,20 @@ float Metrics::iou(cv::Rect obj1, cv::Rect obj2)
 	return iou;
 }
 
-void Metrics::processFrame(cv::Rect object, cv::Rect hypothesis)
+void Metrics::processFrame(cv::Rect hypothesis)
 {
-    float overlapp = iou(object,hypothesis);;
-    std::cout<<"overlap : "<<overlapp<<std::endl;
-    if (overlapp<0.80)
+    float overlap = 0.0;
+    overlap = iou(realPositions[count],hypothesis);
+    
+    std::cout<<"overlap : "<<overlap<<std::endl;
+    if (overlap<0.80)
     {
         mismatches[count] = 1;
     }  
     else
     {
-        double x_prev = object.x + object.width / 2;
-        double y_prev = object.y + object.height / 2;
+        double x_prev = realPositions[count].x + realPositions[count].width / 2;
+        double y_prev = realPositions[count].y + realPositions[count].height / 2;
         double x_tr = hypothesis.x + hypothesis.width / 2;
         double y_tr = hypothesis.y + hypothesis.height / 2;
         float x = x_prev - x_tr; //calculating number to square in next step
@@ -125,7 +148,6 @@ void Metrics::processFrame(cv::Rect object, cv::Rect hypothesis)
         nmatches[count] = 1;
         distances[count] = dist;
     }
-          
     count++;
 }
 
@@ -448,6 +470,8 @@ void TLD::processImage(const Mat &img)
     cvtColor(img, grey_frame, CV_BGR2GRAY);
     currImg = grey_frame; // Store new image , right after storeCurrentData();
 
+
+
     if(trackerEnabled)
     {
         medianFlowTracker->track(prevImg, currImg, prevBB);
@@ -556,9 +580,9 @@ void TLD::fuseHypotheses()
     }
     
     //mettere detectorBB al posto di prevBB
-    if(detectorBB && currBB)
+    if(currBB)
     {
-        metric.processFrame(*detectorBB, *currBB);
+        metric.processFrame(*currBB);
     }
     else
     {
